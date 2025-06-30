@@ -81,7 +81,7 @@ def create_resume_task():
         '/SC', 'ONSTART',
         '/RL', 'HIGHEST',
         '/RU', 'SYSTEM',
-        '/TR', f'"{sys.executable}" "{Path(__file__).resolve()}"'
+        '/TR', ' '.join(f'"{p}"' for p in [sys.executable, Path(__file__).resolve()])
     ]
     try:
         subprocess.run(cmd, check=True)
@@ -103,21 +103,14 @@ def reboot_system():
 
 def is_reboot_pending():
     reboot_keys = [
-        (
-            r'SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\WindowsUpdate'
-            r'\\Auto Update\\RebootRequired'
-        ),
-        (
-            r'SYSTEM\\CurrentControlSet\\Control\\Session Manager'
-            r'\\PendingFileRenameOperations'
-        ),
+        r'SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired',
+        r'SYSTEM\CurrentControlSet\Control\Session Manager\PendingFileRenameOperations',
     ]
     try:
         import winreg
-        for key in reboot_keys:
-            hive = winreg.HKEY_LOCAL_MACHINE
+        for subkey in reboot_keys:
             try:
-                winreg.OpenKey(hive, key)
+                winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, subkey)
                 return True
             except FileNotFoundError:
                 continue
