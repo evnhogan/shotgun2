@@ -56,11 +56,15 @@ def run_as_admin():
 
 def load_state():
     if STATE_FILE.exists():
-        with STATE_FILE.open('r', encoding='utf-8') as f:
-            try:
+        try:
+            with STATE_FILE.open('r', encoding='utf-8') as f:
                 return json.load(f)
-            except json.JSONDecodeError:
-                logger.warning('State file corrupt, starting fresh')
+        except json.JSONDecodeError:
+            logger.warning('State file corrupt, removing and starting fresh')
+            try:
+                STATE_FILE.unlink()
+            except OSError as e:
+                logger.error('Failed to delete corrupt state file: %s', e)
     return {'step': 0, 'completed_files': []}
 
 
@@ -94,7 +98,7 @@ def remove_resume_task():
 def reboot_system():
     create_resume_task()
     logger.info('Rebooting system...')
-    subprocess.run(['shutdown', '/r', '/t', '5', '/f'], shell=True)
+    subprocess.run(['shutdown', '/r', '/t', '5', '/f'], check=True)
 
 
 def is_reboot_pending():
@@ -164,11 +168,19 @@ def install_dell_updates():
 # --- Install files ---
 
 
+def _run_installer_file(path: Path):
+    """Execute an installer file and block until completion."""
+    cmd = [str(path)]
+    if path.suffix.lower() == '.msi':
+        cmd = ['msiexec', '/i', str(path), '/qn', '/norestart']
+    subprocess.run(cmd, check=True)
+
+
 def run_installers(state):
     if not INSTALL_DIR.exists():
         logger.warning('Installer directory %s not found', INSTALL_DIR)
         return
-    files = sorted(INSTALL_DIR.glob('*'))
+    files = [f for f in sorted(INSTALL_DIR.glob('*')) if f.is_file()]
     total = len(files)
     bar = None
     if tqdm:
@@ -182,7 +194,7 @@ def run_installers(state):
             continue
         try:
             logger.info('Running installer %s', f)
-            subprocess.run([str(f)], check=True)
+            _run_installer_file(f)
             state['completed_files'].append(str(f))
             save_state(state)
         except Exception as e:
@@ -221,3 +233,4 @@ if __name__ == '__main__':
         main()
     except Exception as exc:
         logger.exception('Fatal error: %s', exc)
+        remove_resume_task()
