@@ -78,10 +78,11 @@ def save_state(state):
 def create_resume_task():
     cmd = [
         'schtasks', '/Create', '/F', '/TN', SCHEDULED_TASK_NAME,
-        '/SC', 'ONSTART',
-        '/RL', 'HIGHEST',
-        '/RU', 'SYSTEM',
-        '/TR', ' '.join(f'"{p}"' for p in [sys.executable, Path(__file__).resolve()])
+        '/SC', 'ONSTART', '/RL', 'HIGHEST', '/RU', 'SYSTEM',
+        '/TR',
+        ' '.join(
+            f'"{p}"' for p in [sys.executable, Path(__file__).resolve()]
+        ),
     ]
     try:
         subprocess.run(cmd, check=True)
@@ -92,7 +93,7 @@ def create_resume_task():
 
 def remove_resume_task():
     cmd = ['schtasks', '/Delete', '/F', '/TN', SCHEDULED_TASK_NAME]
-    subprocess.run(cmd)
+    subprocess.run(cmd, check=False)
 
 
 def reboot_system():
@@ -103,8 +104,14 @@ def reboot_system():
 
 def is_reboot_pending():
     reboot_keys = [
-        r'SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired',
-        r'SYSTEM\CurrentControlSet\Control\Session Manager\PendingFileRenameOperations',
+        (
+            r'SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate'
+            r'\Auto Update\RebootRequired'
+        ),
+        (
+            r'SYSTEM\CurrentControlSet\Control\Session Manager'
+            r'\PendingFileRenameOperations'
+        ),
     ]
     try:
         import winreg
@@ -154,9 +161,26 @@ def install_dell_updates():
         logger.warning('Dell Command Update not found at %s', dcu)
         return
     try:
-        subprocess.run([str(dcu), '/applyUpdates', '/silent'], check=True)
+        result = subprocess.run(
+            [str(dcu), '/applyUpdates', '/silent'],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            logger.info('Dell Command Update completed successfully')
+        elif result.returncode == 2:
+            logger.info('No Dell updates available')
+        elif result.returncode == 102:
+            logger.info('Dell Command Update requires a reboot to continue')
+        else:
+            logger.error(
+                'Dell Command Update failed with exit code %s: %s',
+                result.returncode,
+                result.stdout.strip() or result.stderr.strip(),
+            )
     except Exception as e:
-        logger.error('Dell Command Update failed: %s', e)
+        logger.error('Dell Command Update invocation failed: %s', e)
 
 # --- Install files ---
 
@@ -227,3 +251,4 @@ if __name__ == '__main__':
     except Exception as exc:
         logger.exception('Fatal error: %s', exc)
         remove_resume_task()
+        sys.exit(1)
