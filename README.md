@@ -39,3 +39,23 @@ pip install pyautogui
 ```
 
 `pyautogui` is required for keyboard and mouse automation in `OOBE.py`.
+
+## Automated OOBE Navigation
+
+`post_oobe.py` continues the Windows setup after running `OOBE.py`. It uses only
+built-in modules and simulates key presses via the Windows API. The script
+selects English and the US keyboard layout, chooses to continue without
+internet and stops at the device name screen. Provide a numeric identifier when
+running the script and it enters `CS-<number>` automatically, leaves the
+password blank and clicks through the remaining setup dialogs until reaching the
+desktop. The program exits immediately if run on a non-Windows system or if the
+device number is not numeric.
+
+### Usage
+
+```bash
+python post_oobe.py 123
+```
+
+This would type `CS-123` when prompted for a device name.
+
