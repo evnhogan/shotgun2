@@ -20,7 +20,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install pyinstaller pyautogui tqdm
+          pip install pyinstaller pyautogui
 
       - name: Build installer executable
         run: pyinstaller --onefile --noconfirm installer.py

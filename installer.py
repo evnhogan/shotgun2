@@ -10,45 +10,13 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 
-try:
-    from tqdm import tqdm
-except ImportError:
-    tqdm = None
+
 
 STATE_FILE = BASE_DIR / 'installer_state.json'
 LOG_FILE = BASE_DIR / 'installer.log'
-INSTALL_DIR = BASE_DIR / 'installers'
-CONFIG_FILE = INSTALL_DIR / 'config.json'
 SCHEDULED_TASK_NAME = 'ShotgunInstallerResume'
 
 
-def load_installer_config() -> dict:
-    """Load installer command templates and merge with ``config.json``."""
-    config = {
-        '.exe': ['{path}', '/S'],
-        '.msi': ['msiexec', '/i', '{path}', '/qn', '/norestart'],
-        '.msu': ['wusa', '{path}', '/quiet', '/norestart'],
-        '.bat': [
-            'powershell', '-ExecutionPolicy', 'Bypass', '-File', '{path}'
-        ],
-        '.cmd': [
-            'powershell', '-ExecutionPolicy', 'Bypass', '-File', '{path}'
-        ],
-        '.ps1': [
-            'powershell', '-ExecutionPolicy', 'Bypass', '-File', '{path}'
-        ],
-    }
-    if CONFIG_FILE.exists():
-        try:
-            with CONFIG_FILE.open(encoding='utf-8') as f:
-                user_conf = json.load(f)
-            config.update(user_conf)
-        except Exception as exc:  # pragma: no cover - config issues
-            logger.error('Failed to load installer config: %s', exc)
-    return config
-
-
-INSTALLER_CONFIG = load_installer_config()
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -101,7 +69,7 @@ def load_state() -> dict:
                 STATE_FILE.unlink()
             except OSError as e:
                 logger.error('Failed to delete corrupt state file: %s', e)
-    return {'step': 0, 'completed_files': []}
+    return {'step': 0}
 
 
 def save_state(state: dict) -> None:
@@ -211,9 +179,13 @@ def install_windows_updates() -> None:
 def install_dell_updates() -> None:
     """Install firmware and driver updates via Dell Command Update."""
     logger.info('Installing Dell Command Update updates...')
-    dcu = Path('C:/Program Files/Dell/CommandUpdate/dcu-cli.exe')
-    if not dcu.exists():
-        logger.warning('Dell Command Update not found at %s', dcu)
+    candidates = [
+        Path('C:/Program Files/Dell/CommandUpdate/dcu-cli.exe'),
+        Path('C:/Program Files (x86)/Dell/CommandUpdate/dcu-cli.exe'),
+    ]
+    dcu = next((p for p in candidates if p.exists()), None)
+    if not dcu:
+        logger.warning('Dell Command Update executable not found')
         return
     try:
         result = subprocess.run(
@@ -240,52 +212,6 @@ def install_dell_updates() -> None:
 # --- Install files ---
 
 
-def _run_installer_file(path: Path) -> None:
-    """Execute a single installer using the configured command template."""
-    template = INSTALLER_CONFIG.get(path.suffix.lower(), ['{path}'])
-    cmd = [part.format(path=str(path)) for part in template]
-    subprocess.run(cmd, check=True)
-
-
-def run_installers(state: dict) -> None:
-    """Execute all installer files found in ``INSTALL_DIR``."""
-    if not INSTALL_DIR.exists():
-        logger.warning('Installer directory %s not found', INSTALL_DIR)
-        return
-    # Remove completed file entries that no longer exist in the installers
-    # directory to keep the progress bar accurate across runs.
-    existing = [
-        p
-        for p in state.get('completed_files', [])
-        if Path(p).is_file() and Path(p).parent == INSTALL_DIR
-    ]
-    if len(existing) != len(state.get('completed_files', [])):
-        state['completed_files'] = existing
-        save_state(state)
-
-    files = [f for f in sorted(INSTALL_DIR.glob('*')) if f.is_file()]
-    total = len(files)
-    bar = None
-    if tqdm:
-        bar = tqdm(
-            total=total,
-            initial=len(state['completed_files']),
-            unit='file',
-        )
-    for f in files:
-        if str(f) in state['completed_files']:
-            continue
-        try:
-            logger.info('Running installer %s', f)
-            _run_installer_file(f)
-            state['completed_files'].append(str(f))
-            save_state(state)
-        except Exception as e:
-            logger.error('Installer %s failed: %s', f, e)
-        if bar:
-            bar.update(1)
-    if bar:
-        bar.close()
 
 
 def main() -> None:
@@ -296,11 +222,11 @@ def main() -> None:
     if not is_admin():
         run_as_admin()
     state = load_state()
-    steps = [install_windows_updates, install_dell_updates, run_installers]
+    steps = [install_windows_updates, install_dell_updates]
     for idx, func in enumerate(steps, start=1):
         if state['step'] >= idx:
             continue
-        func(state) if func == run_installers else func()
+        func()
         state['step'] = idx
         save_state(state)
         if is_reboot_pending():
@@ -309,6 +235,15 @@ def main() -> None:
             return
     save_state(state)
     remove_resume_task()
+    try:
+        ctypes.windll.user32.MessageBoxW(
+            0,
+            'All Windows & Dell Command Updates Finished! Moving to the next phase...',
+            'Updates Complete',
+            0x40,
+        )
+    except Exception as e:
+        logger.error('Failed to display completion message: %s', e)
     logger.info('Installation completed successfully')
 
 
