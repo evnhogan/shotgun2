@@ -23,6 +23,13 @@ python OOBE.py [--delay SECONDS] [command]
 
 The script exits early on non-Windows systems or if `pyautogui` cannot be loaded.
 
+### Automatic launch from USB
+
+Copy `OOBE.py`, `OOBE.bat` and `autorun.inf` to the root of a USB drive. When
+the drive is inserted during the first boot, Windows AutoPlay can start the
+batch file which runs `OOBE.py` automatically. Modern Windows versions may
+require manually approving the action.
+
 ## Requirements
 
 Install the following Python package before running either script:

@@ -1,0 +1,5 @@
+[autorun]
+open=OOBE.bat
+action=Run OOBE Bypass Utility
+label=OOBE Bypass
+

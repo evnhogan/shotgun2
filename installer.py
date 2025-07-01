@@ -6,6 +6,10 @@ import logging
 import subprocess
 import ctypes
 import platform
+import os
+import urllib.request
+import re
+import tempfile
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -176,6 +180,31 @@ def install_windows_updates() -> None:
 # --- Dell Updates ---
 
 
+def download_latest_dcu() -> Path | None:
+    """Download the latest Dell Command Update installer and return its path."""
+    url_page = (
+        'https://www.dell.com/support/kbdoc/en-us/000183146/dell-command-update'
+    )
+    try:
+        with urllib.request.urlopen(url_page) as resp:
+            html = resp.read().decode('utf-8', errors='ignore')
+        match = re.search(
+            r'https://dl\.dell\.com/[^"\s]*Command-Update[^"\s]*\.exe', html
+        )
+        if not match:
+            logger.error('Could not find Dell Command Update download link')
+            return None
+        url = match.group(0)
+        fd, tmp_path = tempfile.mkstemp(suffix='.exe')
+        os.close(fd)
+        logger.info('Downloading Dell Command Update from %s', url)
+        urllib.request.urlretrieve(url, tmp_path)
+        return Path(tmp_path)
+    except Exception as exc:
+        logger.error('Failed to download Dell Command Update: %s', exc)
+        return None
+
+
 def install_dell_updates() -> None:
     """Install firmware and driver updates via Dell Command Update."""
     logger.info('Installing Dell Command Update updates...')
@@ -186,7 +215,19 @@ def install_dell_updates() -> None:
     dcu = next((p for p in candidates if p.exists()), None)
     if not dcu:
         logger.warning('Dell Command Update executable not found')
-        return
+        installer = download_latest_dcu()
+        if not installer:
+            logger.error('Unable to download Dell Command Update')
+            return
+        try:
+            subprocess.run([str(installer), '/s'], check=True)
+        except Exception as e:
+            logger.error('Failed to install Dell Command Update: %s', e)
+            return
+        dcu = next((p for p in candidates if p.exists()), None)
+        if not dcu:
+            logger.error('Dell Command Update installation did not create CLI')
+            return
     try:
         result = subprocess.run(
             [str(dcu), '/applyUpdates', '/silent'],
