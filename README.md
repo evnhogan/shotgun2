@@ -23,3 +23,14 @@ python OOBE.py [--delay SECONDS] [command]
 - `command` is the command to run once the prompt appears; the default is `OOBE/bypassnro`.
 
 The script exits early on non-Windows systems or if `pyautogui` cannot be loaded.
+
+## Requirements
+
+Install the following Python packages before running either script:
+
+```bash
+pip install pyautogui tqdm
+```
+
+`pyautogui` is required for keyboard and mouse automation in `OOBE.py`, while
+`tqdm` enables progress bars in `installer.py`.

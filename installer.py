@@ -179,7 +179,7 @@ def install_windows_updates() -> None:
         'Get-WindowsUpdate -Install -AcceptAll -MicrosoftUpdate -IgnoreReboot'
     )
     try:
-        subprocess.run(
+        result = subprocess.run(
             [
                 'powershell',
                 '-NoProfile',
@@ -188,10 +188,22 @@ def install_windows_updates() -> None:
                 '-Command',
                 powershell_cmd,
             ],
-            check=True,
+            check=False,
+            capture_output=True,
+            text=True,
         )
+        if result.returncode == 0:
+            logger.info('Windows updates installed successfully')
+        else:
+            logger.error(
+                'Windows update command failed with code %s', result.returncode
+            )
+            if result.stdout:
+                logger.error('stdout: %s', result.stdout.strip())
+            if result.stderr:
+                logger.error('stderr: %s', result.stderr.strip())
     except Exception as e:
-        logger.error('Windows update failed: %s', e)
+        logger.error('Windows update invocation failed: %s', e)
 
 # --- Dell Updates ---
 
@@ -240,6 +252,17 @@ def run_installers(state: dict) -> None:
     if not INSTALL_DIR.exists():
         logger.warning('Installer directory %s not found', INSTALL_DIR)
         return
+    # Remove completed file entries that no longer exist in the installers
+    # directory to keep the progress bar accurate across runs.
+    existing = [
+        p
+        for p in state.get('completed_files', [])
+        if Path(p).is_file() and Path(p).parent == INSTALL_DIR
+    ]
+    if len(existing) != len(state.get('completed_files', [])):
+        state['completed_files'] = existing
+        save_state(state)
+
     files = [f for f in sorted(INSTALL_DIR.glob('*')) if f.is_file()]
     total = len(files)
     bar = None
