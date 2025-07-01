@@ -1,3 +1,5 @@
+"""Automated installer runner for Windows machines."""
+
 import sys
 import json
 import logging
@@ -16,7 +18,37 @@ except ImportError:
 STATE_FILE = BASE_DIR / 'installer_state.json'
 LOG_FILE = BASE_DIR / 'installer.log'
 INSTALL_DIR = BASE_DIR / 'installers'
+CONFIG_FILE = INSTALL_DIR / 'config.json'
 SCHEDULED_TASK_NAME = 'ShotgunInstallerResume'
+
+
+def load_installer_config() -> dict:
+    """Load installer command templates and merge with ``config.json``."""
+    config = {
+        '.exe': ['{path}', '/S'],
+        '.msi': ['msiexec', '/i', '{path}', '/qn', '/norestart'],
+        '.msu': ['wusa', '{path}', '/quiet', '/norestart'],
+        '.bat': [
+            'powershell', '-ExecutionPolicy', 'Bypass', '-File', '{path}'
+        ],
+        '.cmd': [
+            'powershell', '-ExecutionPolicy', 'Bypass', '-File', '{path}'
+        ],
+        '.ps1': [
+            'powershell', '-ExecutionPolicy', 'Bypass', '-File', '{path}'
+        ],
+    }
+    if CONFIG_FILE.exists():
+        try:
+            with CONFIG_FILE.open(encoding='utf-8') as f:
+                user_conf = json.load(f)
+            config.update(user_conf)
+        except Exception as exc:  # pragma: no cover - config issues
+            logger.error('Failed to load installer config: %s', exc)
+    return config
+
+
+INSTALLER_CONFIG = load_installer_config()
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -29,7 +61,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def is_admin():
+def is_admin() -> bool:
+    """Return ``True`` if running with administrator privileges."""
+
     if platform.system() != 'Windows':
         return False
     try:
@@ -39,7 +73,8 @@ def is_admin():
         return False
 
 
-def run_as_admin():
+def run_as_admin() -> None:
+    """Re-launch this script with administrator rights and exit."""
     logger.info('Re-launching script with administrator privileges')
     script = Path(__file__).resolve()
     params = ' '.join([f'"{script}"'] + [f'"{p}"' for p in sys.argv[1:]])
@@ -54,7 +89,8 @@ def run_as_admin():
     sys.exit(0)
 
 
-def load_state():
+def load_state() -> dict:
+    """Return persisted install state or an empty default."""
     if STATE_FILE.exists():
         try:
             with STATE_FILE.open('r', encoding='utf-8') as f:
@@ -68,14 +104,16 @@ def load_state():
     return {'step': 0, 'completed_files': []}
 
 
-def save_state(state):
+def save_state(state: dict) -> None:
+    """Persist installer progress to the state file."""
     with STATE_FILE.open('w', encoding='utf-8') as f:
         json.dump(state, f)
 
 # --- Restart handling ---
 
 
-def create_resume_task():
+def create_resume_task() -> None:
+    """Create a scheduled task to resume this installer after reboot."""
     cmd = [
         'schtasks', '/Create', '/F', '/TN', SCHEDULED_TASK_NAME,
         '/SC', 'ONSTART', '/RL', 'HIGHEST', '/RU', 'SYSTEM',
@@ -91,18 +129,21 @@ def create_resume_task():
         logger.error('Failed to create scheduled task: %s', e)
 
 
-def remove_resume_task():
+def remove_resume_task() -> None:
+    """Delete the scheduled resume task if it exists."""
     cmd = ['schtasks', '/Delete', '/F', '/TN', SCHEDULED_TASK_NAME]
     subprocess.run(cmd, check=False)
 
 
-def reboot_system():
+def reboot_system() -> None:
+    """Reboot the machine and schedule resume of the installer."""
     create_resume_task()
     logger.info('Rebooting system...')
     subprocess.run(['shutdown', '/r', '/t', '5', '/f'], check=True)
 
 
-def is_reboot_pending():
+def is_reboot_pending() -> bool:
+    """Return ``True`` if Windows signals that a reboot is pending."""
     reboot_keys = [
         (
             r'SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate'
@@ -128,7 +169,8 @@ def is_reboot_pending():
 # --- Windows Updates ---
 
 
-def install_windows_updates():
+def install_windows_updates() -> None:
+    """Install all available Windows updates via PowerShell."""
     logger.info('Installing Windows updates...')
     powershell_cmd = (
         'Install-Module -Name PSWindowsUpdate -Force; '
@@ -154,7 +196,8 @@ def install_windows_updates():
 # --- Dell Updates ---
 
 
-def install_dell_updates():
+def install_dell_updates() -> None:
+    """Install firmware and driver updates via Dell Command Update."""
     logger.info('Installing Dell Command Update updates...')
     dcu = Path('C:/Program Files/Dell/CommandUpdate/dcu-cli.exe')
     if not dcu.exists():
@@ -185,15 +228,15 @@ def install_dell_updates():
 # --- Install files ---
 
 
-def _run_installer_file(path: Path):
-    """Execute an installer file and block until completion."""
-    cmd = [str(path)]
-    if path.suffix.lower() == '.msi':
-        cmd = ['msiexec', '/i', str(path), '/qn', '/norestart']
+def _run_installer_file(path: Path) -> None:
+    """Execute a single installer using the configured command template."""
+    template = INSTALLER_CONFIG.get(path.suffix.lower(), ['{path}'])
+    cmd = [part.format(path=str(path)) for part in template]
     subprocess.run(cmd, check=True)
 
 
-def run_installers(state):
+def run_installers(state: dict) -> None:
+    """Execute all installer files found in ``INSTALL_DIR``."""
     if not INSTALL_DIR.exists():
         logger.warning('Installer directory %s not found', INSTALL_DIR)
         return
@@ -222,7 +265,8 @@ def run_installers(state):
         bar.close()
 
 
-def main():
+def main() -> None:
+    """Run update and installer steps, handling reboots as needed."""
     if platform.system() != 'Windows':
         logger.error('This installer only runs on Windows')
         return
