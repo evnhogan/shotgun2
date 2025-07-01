@@ -1,8 +1,0 @@
-{
-    ".exe": ["{path}", "/S"],
-    ".msi": ["msiexec", "/i", "{path}", "/qn", "/norestart"],
-    ".msu": ["wusa", "{path}", "/quiet", "/norestart"],
-    ".bat": ["powershell", "-ExecutionPolicy", "Bypass", "-File", "{path}"],
-    ".cmd": ["powershell", "-ExecutionPolicy", "Bypass", "-File", "{path}"],
-    ".ps1": ["powershell", "-ExecutionPolicy", "Bypass", "-File", "{path}"]
-}

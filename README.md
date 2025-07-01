@@ -3,13 +3,12 @@ An all-in-one Python-based installer for C/S new hire computers
 
 ## Windows Automated Installer
 
-`installer.py` automates Windows and Dell Command updates, then executes installation packages in the `installers` directory. The script maintains state between reboots and resumes automatically via a scheduled task.
+`installer.py` automates Windows and Dell Command updates. The script maintains state between reboots and resumes automatically via a scheduled task.
 ### Usage
-1. Place any installation executables in the `installers` folder.
-2. Run `python installer.py` from an elevated PowerShell or Command Prompt. The script will request administrator rights if not already elevated.
-3. The program logs progress to `installer.log` and the console. If `tqdm` is installed, a progress bar is shown for installer files.
-4. `.msi` packages are installed silently via `msiexec /qn /norestart` while other executables are run directly.
-5. If a reboot is required, the machine will restart and continue from the last completed step using the `ShotgunInstallerResume` scheduled task.
+1. Run `python installer.py` from an elevated PowerShell or Command Prompt. The script will request administrator rights if not already elevated.
+2. The program logs progress to `installer.log` and the console.
+3. If a reboot is required, the machine will restart and continue from the last completed step using the `ShotgunInstallerResume` scheduled task.
+4. After updates finish, a pop-up confirms completion before proceeding.
 
 ## Windows OOBE Bypass Utility
 
@@ -26,11 +25,10 @@ The script exits early on non-Windows systems or if `pyautogui` cannot be loaded
 
 ## Requirements
 
-Install the following Python packages before running either script:
+Install the following Python package before running either script:
 
 ```bash
-pip install pyautogui tqdm
+pip install pyautogui
 ```
 
-`pyautogui` is required for keyboard and mouse automation in `OOBE.py`, while
-`tqdm` enables progress bars in `installer.py`.
+`pyautogui` is required for keyboard and mouse automation in `OOBE.py`.
