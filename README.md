@@ -9,6 +9,9 @@ An all-in-one Python-based installer for C/S new hire computers
 2. The program logs progress to `installer.log` and the console.
 3. If a reboot is required, the machine will restart and continue from the last completed step using the `ShotgunInstallerResume` scheduled task.
 4. After updates finish, a pop-up confirms completion before proceeding.
+5. To resume manually after an unexpected reboot, rerun `python installer.py`
+   The script continues from the saved step in `installer_state.json`.
+6. Use `--windows-updates` and `--dell-updates` to run only selected steps.
 
 ## Windows OOBE Bypass Utility
 
@@ -16,9 +19,10 @@ An all-in-one Python-based installer for C/S new hire computers
 
 ### Usage
 ```bash
-python OOBE.py [--delay SECONDS] [command]
+python OOBE.py [--delay SECONDS] [--dry-run] [command]
 ```
 - `--delay` specifies how long to wait after the command prompt opens (default 2 seconds).
+- `--dry-run` logs actions without sending any keyboard input.
 - `command` is the command to run once the prompt appears; the default is `OOBE/bypassnro`.
 
 The script exits early on non-Windows systems or if `pyautogui` cannot be loaded.
